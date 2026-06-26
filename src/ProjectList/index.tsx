@@ -94,7 +94,7 @@ export default function ProjectList({ ide, onBack, onEdit }: { ide: IDEItem; onB
       e.preventDefault(); setSelected(i => Math.max(i - 1, 0))
     } else if (e.key === 'Enter' && selected >= 0) {
       e.preventDefault(); handleOpen(filtered[selected])
-    } else if ((e.key === 'Delete' || (e.key === 'd' && (e.ctrlKey || e.metaKey))) && selected >= 0) {
+    } else if ((e.key === 'd' && (e.ctrlKey || e.metaKey)) && selected >= 0) {
       e.preventDefault(); handleDelete(filtered[selected])
     }
   }
@@ -136,7 +136,7 @@ export default function ProjectList({ ide, onBack, onEdit }: { ide: IDEItem; onB
       <input ref={inputRef} className='pl-search' type='text' value={search}
         onChange={e => setSearch(e.target.value)}
         onKeyDown={onKeyDown}
-        placeholder='搜索项目，Enter 打开，Delete 删除...' />
+        placeholder='搜索项目，Enter 打开，Ctrl+D 删除...' />
 
       {loading && <div className='pl-loading'>加载中...</div>}
       {error && !loading && <div className='project-error'><p>{error}</p></div>}
