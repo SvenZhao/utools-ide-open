@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/uTools-Labs/utools-api-types/refs/heads/main/resource/utools.schema.json",
+  "main": "index.html",
+  "preload": "preload/plugins.js",
+  "pluginName": "VscodeOpen",
+  "logo": "logo.png",
+  "development": {
+    "main": "http://127.0.0.1:5173/index.html"
+  },
+  "features": [
+    {
+      "code": "vscodeopen",
+      "explain": "打开 VscodeOpen 设置，配置编辑器并注册快捷命令",
+      "cmds": ["vscodeopen"]
+    }
+  ]
+}

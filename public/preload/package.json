@@ -1,0 +1,7 @@
+{
+  "type": "commonjs",
+  "dependencies": {
+    "sql.js": "^1.14.1",
+    "utools-helper": "^2.2.0"
+  }
+}
