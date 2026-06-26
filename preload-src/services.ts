@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { exec, execSync, spawn, SpawnOptions } from 'node:child_process'
+import { exec } from 'node:child_process'
 
 // ─── sql.js 原生加载（绕过 uTools 混合环境的 fetch 误判） ──
 
@@ -239,48 +239,19 @@ export function saveIDEs(ides: IDEItem[]) {
   utools.dbStorage.setItem(STORAGE_KEY, ides)
 }
 
-// ─── Shell 环境 ──
-
-function getShellEnv(): NodeJS.ProcessEnv {
-  if (process.platform === 'win32') return process.env
-  try {
-    const shell = process.env.SHELL || 'zsh'
-    // 登录 shell 加载 .zprofile/.bash_profile，再 source rc 文件确保 PATH 完整
-    const cmd = `${shell} -l -c 'source ~/.zshrc 2>/dev/null; source ~/.bashrc 2>/dev/null; source ~/.profile 2>/dev/null; env'`
-    const envStr = execSync(cmd, { encoding: 'utf-8', timeout: 3000 })
-    const env = { ...process.env }
-    envStr.split('\n').forEach(line => {
-      const idx = line.indexOf('=')
-      if (idx > 0) {
-        const k = line.slice(0, idx)
-        const v = line.slice(idx + 1)
-        if (k && v) env[k] = v
-      }
-    })
-    return env
-  } catch {
-    return process.env
-  }
-}
-
 // ─── 打开项目 ──
 
 export function openProject(command: string, uri: string, shell?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const isWorkspace = uri.endsWith('.code-workspace')
     const flag = isWorkspace ? '--file-uri' : '--folder-uri'
-    const env = getShellEnv()
-    const child = spawn(command, [flag, uri], {
-      shell: shell || true,
-      env,
-      stdio: 'ignore',
-      windowsHide: true
-    } as SpawnOptions)
-    child.on('error', (err) => reject(new Error(`启动失败: ${err.message}`)))
-    child.on('spawn', () => resolve())
-    setTimeout(() => {
-      if (child.exitCode === null) resolve()
-    }, 3000)
+    const cmd = `${command} ${flag} "${uri}"`
+    // 用户配置了 shell（如 "zsh -l -c"）就用它包装命令，确保加载 rc 文件拿到完整 PATH
+    const fullCmd = shell ? `${shell} '${cmd}'` : cmd
+    exec(fullCmd, { env: process.env, windowsHide: true, timeout: 3000 }, (err) => {
+      if (err) reject(new Error(`启动失败: ${err.message}`))
+      else resolve()
+    })
   })
 }
 

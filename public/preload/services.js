@@ -222,42 +222,16 @@ function getIDEs() {
 function saveIDEs(ides) {
   utools.dbStorage.setItem(STORAGE_KEY, ides);
 }
-function getShellEnv() {
-  if (process.platform === "win32") return process.env;
-  try {
-    const shell = process.env.SHELL || "zsh";
-    const cmd = `${shell} -l -c 'source ~/.zshrc 2>/dev/null; source ~/.bashrc 2>/dev/null; source ~/.profile 2>/dev/null; env'`;
-    const envStr = (0, import_node_child_process.execSync)(cmd, { encoding: "utf-8", timeout: 3e3 });
-    const env = { ...process.env };
-    envStr.split("\n").forEach((line) => {
-      const idx = line.indexOf("=");
-      if (idx > 0) {
-        const k = line.slice(0, idx);
-        const v = line.slice(idx + 1);
-        if (k && v) env[k] = v;
-      }
-    });
-    return env;
-  } catch {
-    return process.env;
-  }
-}
 function openProject(command, uri, shell) {
   return new Promise((resolve, reject) => {
     const isWorkspace = uri.endsWith(".code-workspace");
     const flag = isWorkspace ? "--file-uri" : "--folder-uri";
-    const env = getShellEnv();
-    const child = (0, import_node_child_process.spawn)(command, [flag, uri], {
-      shell: shell || true,
-      env,
-      stdio: "ignore",
-      windowsHide: true
+    const cmd = `${command} ${flag} "${uri}"`;
+    const fullCmd = shell ? `${shell} '${cmd}'` : cmd;
+    (0, import_node_child_process.exec)(fullCmd, { env: process.env, windowsHide: true, timeout: 3e3 }, (err) => {
+      if (err) reject(new Error(`\u542F\u52A8\u5931\u8D25: ${err.message}`));
+      else resolve();
     });
-    child.on("error", (err) => reject(new Error(`\u542F\u52A8\u5931\u8D25: ${err.message}`)));
-    child.on("spawn", () => resolve());
-    setTimeout(() => {
-      if (child.exitCode === null) resolve();
-    }, 3e3);
   });
 }
 const homeDir = () => process.env.HOME || process.env.USERPROFILE || "";
