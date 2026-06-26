@@ -28,6 +28,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var services_exports = {};
 __export(services_exports, {
+  deleteProject: () => deleteProject,
   detectPresetPaths: () => detectPresetPaths,
   getIDEs: () => getIDEs,
   getPresets: () => getPresets,
@@ -66,9 +67,9 @@ const RECENT_KEYS = [
 async function readProjectsFromSQLite(dbPath) {
   const SQL = await getSQL();
   const candidates = [dbPath];
-  const home = process.env.HOME || process.env.USERPROFILE;
-  if (home && dbPath.includes(path.join("Code", "User", "globalStorage"))) {
-    const shared = path.join(home, ".vscode-shared", "sharedStorage", "state.vscdb");
+  const home2 = process.env.HOME || process.env.USERPROFILE;
+  if (home2 && dbPath.includes(path.join("Code", "User", "globalStorage"))) {
+    const shared = path.join(home2, ".vscode-shared", "sharedStorage", "state.vscdb");
     if (fs.existsSync(shared) && !candidates.includes(shared)) candidates.push(shared);
   }
   for (const filePath of candidates) {
@@ -168,7 +169,47 @@ async function readProjects(filePath) {
     return await readProjectsFromJSON(filePath);
   }
 }
-const STORAGE_KEY = "vsc-ides";
+async function deleteProject(dbPath, uri) {
+  const candidates = [dbPath];
+  const home2 = process.env.HOME || process.env.USERPROFILE;
+  if (home2 && dbPath.includes(path.join("Code", "User", "globalStorage"))) {
+    const shared = path.join(home2, ".vscode-shared", "sharedStorage", "state.vscdb");
+    if (fs.existsSync(shared) && !candidates.includes(shared)) candidates.push(shared);
+  }
+  for (const filePath of candidates) {
+    if (!fs.existsSync(filePath)) continue;
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext !== ".vscdb" && ext !== ".db") continue;
+    const SQL = await getSQL();
+    const buffer = fs.readFileSync(filePath);
+    const db = new SQL.Database(buffer);
+    try {
+      for (const key of RECENT_KEYS) {
+        const results = db.exec(`SELECT value FROM ItemTable WHERE key = '${key}'`);
+        if (results.length === 0 || results[0].values.length === 0) continue;
+        const value = results[0].values[0][0];
+        const data = JSON.parse(value);
+        const entries = data.entries || [];
+        const before = entries.length;
+        data.entries = entries.filter((e) => {
+          if (typeof e === "string") return e !== uri;
+          const ep = e.folderUri || e.fileUri || e.workspace?.configPath;
+          return ep !== uri;
+        });
+        if (data.entries.length === before) continue;
+        const updated = JSON.stringify(data);
+        db.run(`UPDATE ItemTable SET value = ? WHERE key = '${key}'`, [updated]);
+        const out = db.export();
+        fs.writeFileSync(filePath, Buffer.from(out));
+        return;
+      }
+    } finally {
+      db.close();
+    }
+  }
+  throw new Error("\u672A\u627E\u5230\u5339\u914D\u7684\u8BB0\u5F55\u6216\u6570\u636E\u5E93\u4E0D\u652F\u6301\u5220\u9664");
+}
+const STORAGE_KEY = "ide-ides";
 function getIDEs() {
   try {
     const data = utools.dbStorage.getItem(STORAGE_KEY);
@@ -213,10 +254,16 @@ function openProject(command, uri, shell) {
     }, 3e3);
   });
 }
+const homeDir = () => process.env.HOME || process.env.USERPROFILE || "";
+const jetBrainsDir = () => {
+  const home2 = homeDir();
+  if (process.platform === "darwin") return path.join(home2, "Library", "Application Support", "JetBrains");
+  if (process.platform === "win32") return path.join(process.env.APPDATA || home2, "JetBrains");
+  return path.join(home2, ".config", "JetBrains");
+};
 function getPresets() {
-  const home = process.env.HOME || process.env.USERPROFILE || "";
   const appData = utools.getPath("appData");
-  const jetBrainsDir = path.join(home, "Library", "Application Support", "JetBrains");
+  const jbDir = jetBrainsDir();
   return {
     vscode: {
       name: "VSCode",
@@ -246,38 +293,49 @@ function getPresets() {
     idea: {
       name: "IntelliJ IDEA",
       command: "idea",
-      dbPaths: [path.join(jetBrainsDir, "IntelliJIdea*", "options", "recentProjects.xml")]
+      dbPaths: [path.join(jbDir, "IntelliJIdea*", "options", "recentProjects.xml")]
     },
     pycharm: {
       name: "PyCharm",
       command: "pycharm",
-      dbPaths: [path.join(jetBrainsDir, "PyCharm*", "options", "recentProjects.xml")]
+      dbPaths: [path.join(jbDir, "PyCharm*", "options", "recentProjects.xml")]
     },
     webstorm: {
       name: "WebStorm",
       command: "webstorm",
-      dbPaths: [path.join(jetBrainsDir, "WebStorm*", "options", "recentProjects.xml")]
+      dbPaths: [path.join(jbDir, "WebStorm*", "options", "recentProjects.xml")]
     },
     goland: {
       name: "GoLand",
       command: "goland",
-      dbPaths: [path.join(jetBrainsDir, "GoLand*", "options", "recentProjects.xml")]
+      dbPaths: [path.join(jbDir, "GoLand*", "options", "recentProjects.xml")]
+    },
+    qoder: {
+      name: "Qoder",
+      command: "qoder",
+      dbPaths: [
+        path.join(appData, "Qoder", "User", "globalStorage", "state.vscdb"),
+        path.join(appData, "Qoder", "storage.json"),
+        path.join(appData, "Qoder", "User", "globalStorage", "storage.json")
+      ]
     }
   };
 }
+const defaultShell = process.platform === "darwin" ? "zsh -l -c" : process.platform === "linux" ? "bash -l -c" : "";
 function getQuickFillPresets() {
-  const home = process.env.HOME || process.env.USERPROFILE || "";
+  const home2 = process.env.HOME || process.env.USERPROFILE || "";
   const appData = utools.getPath("appData");
-  const jetBrainsDir = path.join(home, "Library", "Application Support", "JetBrains");
-  const vscDbPath = home ? path.join(home, ".vscode-shared", "sharedStorage", "state.vscdb") : path.join(appData, "Code", "User", "globalStorage", "state.vscdb");
+  const jbDir = jetBrainsDir();
+  const vscDbPath = home2 ? path.join(home2, ".vscode-shared", "sharedStorage", "state.vscdb") : path.join(appData, "Code", "User", "globalStorage", "state.vscdb");
   return [
-    { code: "vsc", name: "VS Code", command: "code", dbPath: vscDbPath },
-    { code: "cursor", name: "Cursor", command: "cursor", dbPath: path.join(appData, "Cursor", "User", "globalStorage", "state.vscdb") },
-    { code: "codium", name: "VSCodium", command: "codium", dbPath: path.join(appData, "VSCodium", "User", "globalStorage", "state.vscdb") },
-    { code: "idea", name: "IntelliJ IDEA", command: "idea", dbPath: jetBrainsDir + "/IntelliJIdea*/options/recentProjects.xml" },
-    { code: "pycharm", name: "PyCharm", command: "pycharm", dbPath: jetBrainsDir + "/PyCharm*/options/recentProjects.xml" },
-    { code: "webstorm", name: "WebStorm", command: "webstorm", dbPath: jetBrainsDir + "/WebStorm*/options/recentProjects.xml" },
-    { code: "goland", name: "GoLand", command: "goland", dbPath: jetBrainsDir + "/GoLand*/options/recentProjects.xml" }
+    { code: "vsc", name: "VS Code", command: "code", dbPath: vscDbPath, shell: defaultShell },
+    { code: "cursor", name: "Cursor", command: "cursor", dbPath: path.join(appData, "Cursor", "User", "globalStorage", "state.vscdb"), shell: defaultShell },
+    { code: "codium", name: "VSCodium", command: "codium", dbPath: path.join(appData, "VSCodium", "User", "globalStorage", "state.vscdb"), shell: defaultShell },
+    { code: "idea", name: "IntelliJ IDEA", command: "idea", dbPath: path.join(jbDir, "IntelliJIdea*", "options", "recentProjects.xml"), shell: defaultShell },
+    { code: "pycharm", name: "PyCharm", command: "pycharm", dbPath: path.join(jbDir, "PyCharm*", "options", "recentProjects.xml"), shell: defaultShell },
+    { code: "webstorm", name: "WebStorm", command: "webstorm", dbPath: path.join(jbDir, "WebStorm*", "options", "recentProjects.xml"), shell: defaultShell },
+    { code: "goland", name: "GoLand", command: "goland", dbPath: path.join(jbDir, "GoLand*", "options", "recentProjects.xml"), shell: defaultShell },
+    { code: "qoder", name: "Qoder", command: "qoder", dbPath: path.join(appData, "Qoder", "User", "globalStorage", "state.vscdb"), shell: defaultShell }
   ];
 }
 function detectPresetPaths() {
@@ -339,7 +397,7 @@ function createSubInputPlugin(ide) {
     }
   };
 }
-const BUILTIN_CODES = /* @__PURE__ */ new Set(["vscodeopen"]);
+const BUILTIN_CODES = /* @__PURE__ */ new Set(["ideopen"]);
 function refreshPlugins() {
   const ides = getIDEs();
   const currentCodes = new Set(ides.filter((i) => i.code).map((i) => i.code));
@@ -354,7 +412,7 @@ function refreshPlugins() {
   }
   registerFeatures();
 }
-const REG_CODES_KEY = "vsc-registered-codes";
+const REG_CODES_KEY = "ide-registered-codes";
 function registerFeatures() {
   const ides = getIDEs();
   const currentCodes = ides.filter((i) => i.code).map((i) => i.code);
@@ -369,7 +427,7 @@ function registerFeatures() {
         icon: "logo.png"
       });
     } catch (e) {
-      console.warn(`[VscodeOpen] \u274C \u6CE8\u518C ${ide.code} \u5931\u8D25:`, e);
+      console.warn(`[ideOpen] \u274C \u6CE8\u518C ${ide.code} \u5931\u8D25:`, e);
     }
   }
   for (const oldCode of prevCodes) {
@@ -377,7 +435,7 @@ function registerFeatures() {
       try {
         utools.removeFeature(oldCode);
       } catch (e) {
-        console.warn(`[VscodeOpen] \u274C \u5220\u9664 feature ${oldCode} \u5931\u8D25:`, e);
+        console.warn(`[ideOpen] \u274C \u5220\u9664 feature ${oldCode} \u5931\u8D25:`, e);
       }
     }
   }
@@ -386,16 +444,20 @@ function registerFeatures() {
 window.services = {
   readProjects,
   openProject,
+  deleteProject,
   getIDEs,
   saveIDEs,
   refreshPlugins,
   registerFeatures,
   getPresets,
   getQuickFillPresets,
-  detectPresetPaths
+  detectPresetPaths,
+  getAppDataPath: () => utools.getPath("appData"),
+  getDefaultShell: () => defaultShell
 };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  deleteProject,
   detectPresetPaths,
   getIDEs,
   getPresets,

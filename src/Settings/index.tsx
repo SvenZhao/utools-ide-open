@@ -1,18 +1,39 @@
 import { useEffect, useState } from 'react'
-import { getIDEs, saveIDEs, getQuickFillPresets, IDEItem } from '../store'
+import { getIDEs, saveIDEs, getQuickFillPresets, getAppDataPath, getDefaultShell, IDEItem } from '../store'
 import './index.css'
 
 const emptyForm = () => ({ code: '', name: '', command: '', dbPath: '', shell: '' })
 
-export default function Settings({ onBack }: { onBack?: () => void }) {
+export default function Settings({ onBack, editIDE }: { onBack?: () => void; editIDE?: IDEItem }) {
   const [ides, setIDEs] = useState<IDEItem[]>([])
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<IDEItem>(emptyForm())
   const [editingIdx, setEditingIdx] = useState(-1)
+  const defaultShell = getDefaultShell()
+  const appData = getAppDataPath()
 
   useEffect(() => {
     setIDEs(getIDEs())
   }, [])
+
+  useEffect(() => {
+    if (!editIDE) return
+    const idx = ides.findIndex(i => i.code === editIDE.code)
+    if (idx >= 0) {
+      setForm({ ...editIDE })
+      setEditingIdx(idx)
+      setShowForm(true)
+    }
+  }, [editIDE])
+
+  const doRegister = (list: IDEItem[]) => {
+    // 直接注册所有当前 IDE（不依赖 window.services）
+    list.forEach(ide => {
+      if (!ide.code) return
+      try { window.utools.setFeature({ code: ide.code, explain: `打开 ${ide.name || ide.code} 最近项目`, cmds: [ide.code], icon: 'logo.png' }) }
+      catch {}
+    })
+  }
 
   const save = () => {
     if (!form.code.trim()) { alert('请输入别名'); return }
@@ -27,20 +48,24 @@ export default function Settings({ onBack }: { onBack?: () => void }) {
     }
     setIDEs(list)
     saveIDEs(list)
+    doRegister(list)
     setForm(emptyForm())
     setEditingIdx(-1)
     setShowForm(false)
   }
 
   const del = (idx: number) => {
+    const removed = ides[idx]
     const list = ides.filter((_, i) => i !== idx)
     setIDEs(list)
     saveIDEs(list)
+    try { if (removed?.code) window.utools.removeFeature(removed.code) } catch {}
+    doRegister(list)
   }
 
-  const startEdit = (idx) => {
+  const startEdit = (idx: number) => {
     const ide = ides[idx]
-    setForm({ code: ide.code, name: ide.name, command: ide.command, dbPath: ide.dbPath, shell: ide.shell || '' })
+    setForm({ code: ide.code, name: ide.name, command: ide.command, dbPath: ide.dbPath, shell: ide.shell || defaultShell })
     setEditingIdx(idx)
     setShowForm(true)
   }
@@ -51,8 +76,8 @@ export default function Settings({ onBack }: { onBack?: () => void }) {
     setShowForm(true)
   }
 
-  const fill = (preset) => {
-    setForm({ code: preset.code, name: preset.name, command: preset.command, dbPath: preset.dbPath, shell: '' })
+  const fill = (preset: any) => {
+    setForm({ code: preset.code, name: preset.name, command: preset.command, dbPath: preset.dbPath, shell: preset.shell || '' })
   }
 
   const isEditing = editingIdx >= 0
@@ -62,7 +87,7 @@ export default function Settings({ onBack }: { onBack?: () => void }) {
     <div className='settings'>
       <div className='top-bar'>
         {onBack && <button className='btn-back' onClick={onBack}>← 返回</button>}
-        <h2>VscodeOpen <span className='subtitle'>配置 IDE</span></h2>
+        <h2>ideOpen <span className='subtitle'>配置 IDE</span></h2>
       </div>
 
       <button className='btn-toggle' onClick={() => {

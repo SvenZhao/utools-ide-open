@@ -52,3 +52,15 @@ export async function readProjects(dbPath: string) {
 export async function openProject(command: string, uri: string, shell?: string) {
   return window.services.openProject(command, uri, shell)
 }
+
+export async function deleteProject(dbPath: string, uri: string) {
+  return window.services.deleteProject(dbPath, uri)
+}
+
+export function getAppDataPath() {
+  return window.services?.getAppDataPath() || ''
+}
+
+export function getDefaultShell() {
+  return window.services?.getDefaultShell() || ''
+}

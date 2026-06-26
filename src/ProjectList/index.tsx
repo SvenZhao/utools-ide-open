@@ -1,8 +1,36 @@
 import { useEffect, useState, useRef } from 'react'
-import { readProjects, openProject, type IDEItem } from '../store'
+import { readProjects, openProject, deleteProject, type IDEItem } from '../store'
 import './index.css'
 
-export default function ProjectList({ ide, onBack }: { ide: IDEItem; onBack?: () => void }) {
+function IconFolder() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M1.5 2h5l1 1.5H14A1.5 1.5 0 0 1 15.5 5v6.5A1.5 1.5 0 0 1 14 13H2A1.5 1.5 0 0 1 .5 11.5V3A1.5 1.5 0 0 1 1.5 2Z" fill="currentColor" opacity=".7"/>
+      <path d="M1.5 2h5l1 1.5H14A1.5 1.5 0 0 1 15.5 5v6.5A1.5 1.5 0 0 1 14 13H2A1.5 1.5 0 0 1 .5 11.5V3A1.5 1.5 0 0 1 1.5 2Z" stroke="currentColor" strokeWidth="1" fill="none"/>
+    </svg>
+  )
+}
+
+function IconFile() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M3 1.5h6.5L13.5 5v9A1.5 1.5 0 0 1 12 15.5H3A1.5 1.5 0 0 1 1.5 14V3A1.5 1.5 0 0 1 3 1.5Z" stroke="currentColor" strokeWidth="1" fill="none"/>
+      <path d="M9.5 1.5V5h4" stroke="currentColor" strokeWidth="1" fill="none"/>
+    </svg>
+  )
+}
+
+function IconRemote() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1" fill="none" opacity=".5"/>
+      <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1" fill="none" opacity=".8"/>
+      <circle cx="8" cy="8" r="1" fill="currentColor"/>
+    </svg>
+  )
+}
+
+export default function ProjectList({ ide, onBack, onEdit }: { ide: IDEItem; onBack?: () => void; onEdit?: () => void }) {
   const [projects, setProjects] = useState<any[]>([])
   const [filtered, setFiltered] = useState<any[]>([])
   const [search, setSearch] = useState('')
@@ -12,7 +40,7 @@ export default function ProjectList({ ide, onBack }: { ide: IDEItem; onBack?: ()
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
+  const load = () => {
     if (!ide.command || !ide.dbPath) {
       setError(`请先在设置页配置「${ide.name}」的数据文件路径`)
       setLoading(false)
@@ -24,8 +52,9 @@ export default function ProjectList({ ide, onBack }: { ide: IDEItem; onBack?: ()
       .then(items => { setProjects(items); setFiltered(items) })
       .catch((err: Error) => setError(`读取失败: ${err.message}`))
       .finally(() => setLoading(false))
-    setTimeout(() => inputRef.current?.focus(), 100)
-  }, [ide.code])
+  }
+
+  useEffect(() => { load(); setTimeout(() => inputRef.current?.focus(), 100) }, [ide.code])
 
   useEffect(() => {
     const q = search.toLowerCase().trim()
@@ -45,19 +74,32 @@ export default function ProjectList({ ide, onBack }: { ide: IDEItem; onBack?: ()
     if (el) el.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
-  const handleKey = (e: React.KeyboardEvent) => {
+  // input 失焦时自动重新聚焦，保证键盘操作始终有效
+  useEffect(() => {
+    const onBlur = () => setTimeout(() => inputRef.current?.focus(), 0)
+    const el = inputRef.current
+    el?.addEventListener('blur', onBlur)
+    return () => el?.removeEventListener('blur', onBlur)
+  }, [])
+
+  // 操作后重新聚焦
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [filtered.length])
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setSelected(i => Math.min(i + 1, filtered.length - 1))
+      e.preventDefault(); setSelected(i => Math.min(i + 1, filtered.length - 1))
     } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelected(i => Math.max(i - 1, 0))
+      e.preventDefault(); setSelected(i => Math.max(i - 1, 0))
     } else if (e.key === 'Enter' && selected >= 0) {
-      handleSelect(filtered[selected])
+      e.preventDefault(); handleOpen(filtered[selected])
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected >= 0) {
+      e.preventDefault(); handleDelete(filtered[selected])
     }
   }
 
-  const handleSelect = async (project: any) => {
+  const handleOpen = async (project: any) => {
     try {
       await openProject(ide.command, project.uri, ide.shell)
       utools.hideMainWindow()
@@ -67,21 +109,37 @@ export default function ProjectList({ ide, onBack }: { ide: IDEItem; onBack?: ()
     }
   }
 
+  const handleDelete = async (project: any) => {
+    if (!confirm(`确定从历史记录中删除「${project.name}」？`)) return
+    try {
+      await deleteProject(ide.dbPath, project.uri)
+      load()
+    } catch (err: any) {
+      alert(`删除失败: ${err.message}`)
+    }
+  }
+
+  const handleContextMenu = (e: React.MouseEvent, project: any) => {
+    e.preventDefault()
+    handleDelete(project)
+  }
+
   return (
-    <div className='project-list' onKeyDown={handleKey}>
+    <div className='project-list'>
       <div className='top-bar'>
         {onBack && <button className='btn-back' onClick={onBack}>← 返回</button>}
         <span className='pl-ide-name'>{ide.name}</span>
         <span className='pl-count'>{filtered.length} 个项目</span>
+        {onEdit && <button className='btn-edit-top' onClick={onEdit}>编辑</button>}
       </div>
 
       <input ref={inputRef} className='pl-search' type='text' value={search}
-        onChange={e => setSearch(e.target.value)} placeholder='搜索项目名称或路径...' />
+        onChange={e => setSearch(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder='搜索项目，Enter 打开，Delete 删除...' />
 
       {loading && <div className='pl-loading'>加载中...</div>}
-
       {error && !loading && <div className='project-error'><p>{error}</p></div>}
-
       {!loading && !error && filtered.length === 0 && (
         <div className='pl-empty'>{search ? '没有匹配的项目' : '暂无最近项目'}</div>
       )}
@@ -90,13 +148,18 @@ export default function ProjectList({ ide, onBack }: { ide: IDEItem; onBack?: ()
         {filtered.map((p, i) => (
           <div key={p.uri || i}
             className={`pl-item ${i === selected ? 'pl-item-selected' : ''}`}
-            onClick={() => handleSelect(p)}
+            onClick={() => handleOpen(p)}
+            onContextMenu={e => handleContextMenu(e, p)}
             onMouseEnter={() => setSelected(i)}>
-            <div className='pl-item-icon'>{p.type === 'remote' ? '🌐' : p.type === 'workspace' ? '📄' : '📁'}</div>
+            <div className='pl-item-icon'>
+              {p.type === 'remote' ? <IconRemote /> : p.type === 'workspace' ? <IconFile /> : <IconFolder />}
+            </div>
             <div className='pl-item-info'>
               <div className='pl-item-name'>{p.name}</div>
               <div className='pl-item-path' title={p.path || p.uri}>{p.path || p.uri}</div>
             </div>
+            <button className='pl-item-del' onClick={e => { e.stopPropagation(); handleDelete(p) }}
+              title='删除此记录'>✕</button>
             {p.type === 'remote' && <span className='pl-item-badge'>远程</span>}
           </div>
         ))}

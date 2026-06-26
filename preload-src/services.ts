@@ -175,9 +175,57 @@ export async function readProjects(filePath: string): Promise<ProjectItem[]> {
   }
 }
 
+// ─── 删除项目记录 ──
+
+export async function deleteProject(dbPath: string, uri: string): Promise<void> {
+  const candidates = [dbPath]
+  const home = process.env.HOME || process.env.USERPROFILE
+  if (home && dbPath.includes(path.join('Code', 'User', 'globalStorage'))) {
+    const shared = path.join(home, '.vscode-shared', 'sharedStorage', 'state.vscdb')
+    if (fs.existsSync(shared) && !candidates.includes(shared)) candidates.push(shared)
+  }
+
+  for (const filePath of candidates) {
+    if (!fs.existsSync(filePath)) continue
+    const ext = path.extname(filePath).toLowerCase()
+    if (ext !== '.vscdb' && ext !== '.db') continue
+
+    const SQL = await getSQL()
+    const buffer = fs.readFileSync(filePath)
+    const db = new SQL.Database(buffer)
+
+    try {
+      for (const key of RECENT_KEYS) {
+        const results = db.exec(`SELECT value FROM ItemTable WHERE key = '${key}'`)
+        if (results.length === 0 || results[0].values.length === 0) continue
+
+        const value = results[0].values[0][0] as string
+        const data = JSON.parse(value)
+        const entries: any[] = data.entries || []
+        const before = entries.length
+        data.entries = entries.filter((e: any) => {
+          if (typeof e === 'string') return e !== uri
+          const ep = e.folderUri || e.fileUri || e.workspace?.configPath
+          return ep !== uri
+        })
+        if (data.entries.length === before) continue
+
+        const updated = JSON.stringify(data)
+        db.run(`UPDATE ItemTable SET value = ? WHERE key = '${key}'`, [updated])
+        const out = db.export()
+        fs.writeFileSync(filePath, Buffer.from(out))
+        return
+      }
+    } finally {
+      db.close()
+    }
+  }
+  throw new Error('未找到匹配的记录或数据库不支持删除')
+}
+
 // ─── IDE 配置管理 ──
 
-const STORAGE_KEY = 'vsc-ides'
+const STORAGE_KEY = 'ide-ides'
 
 export function getIDEs(): IDEItem[] {
   try {
@@ -231,10 +279,17 @@ export function openProject(command: string, uri: string, shell?: string): Promi
 
 // ─── 预设 ──
 
+const homeDir = () => process.env.HOME || process.env.USERPROFILE || ''
+const jetBrainsDir = () => {
+  const home = homeDir()
+  if (process.platform === 'darwin') return path.join(home, 'Library', 'Application Support', 'JetBrains')
+  if (process.platform === 'win32') return path.join(process.env.APPDATA || home, 'JetBrains')
+  return path.join(home, '.config', 'JetBrains')
+}
+
 export function getPresets() {
-  const home = process.env.HOME || process.env.USERPROFILE || ''
   const appData = utools.getPath('appData')
-  const jetBrainsDir = path.join(home!, 'Library', 'Application Support', 'JetBrains')
+  const jbDir = jetBrainsDir()
   return {
     vscode: {
       name: 'VSCode',
@@ -264,42 +319,53 @@ export function getPresets() {
     idea: {
       name: 'IntelliJ IDEA',
       command: 'idea',
-      dbPaths: [path.join(jetBrainsDir, 'IntelliJIdea*', 'options', 'recentProjects.xml')]
+      dbPaths: [path.join(jbDir, 'IntelliJIdea*', 'options', 'recentProjects.xml')]
     },
     pycharm: {
       name: 'PyCharm',
       command: 'pycharm',
-      dbPaths: [path.join(jetBrainsDir, 'PyCharm*', 'options', 'recentProjects.xml')]
+      dbPaths: [path.join(jbDir, 'PyCharm*', 'options', 'recentProjects.xml')]
     },
     webstorm: {
       name: 'WebStorm',
       command: 'webstorm',
-      dbPaths: [path.join(jetBrainsDir, 'WebStorm*', 'options', 'recentProjects.xml')]
+      dbPaths: [path.join(jbDir, 'WebStorm*', 'options', 'recentProjects.xml')]
     },
     goland: {
       name: 'GoLand',
       command: 'goland',
-      dbPaths: [path.join(jetBrainsDir, 'GoLand*', 'options', 'recentProjects.xml')]
+      dbPaths: [path.join(jbDir, 'GoLand*', 'options', 'recentProjects.xml')]
+    },
+    qoder: {
+      name: 'Qoder',
+      command: 'qoder',
+      dbPaths: [
+        path.join(appData, 'Qoder', 'User', 'globalStorage', 'state.vscdb'),
+        path.join(appData, 'Qoder', 'storage.json'),
+        path.join(appData, 'Qoder', 'User', 'globalStorage', 'storage.json')
+      ]
     }
   }
 }
 
+const defaultShell = process.platform === 'darwin' ? 'zsh -l -c' : process.platform === 'linux' ? 'bash -l -c' : ''
+
 export function getQuickFillPresets() {
   const home = process.env.HOME || process.env.USERPROFILE || ''
   const appData = utools.getPath('appData')
-  const jetBrainsDir = path.join(home!, 'Library', 'Application Support', 'JetBrains')
-  // VSCode 新版使用共享存储，优先使用
+  const jbDir = jetBrainsDir()
   const vscDbPath = home
     ? path.join(home, '.vscode-shared', 'sharedStorage', 'state.vscdb')
     : path.join(appData, 'Code', 'User', 'globalStorage', 'state.vscdb')
   return [
-    { code: 'vsc', name: 'VS Code', command: 'code', dbPath: vscDbPath },
-    { code: 'cursor', name: 'Cursor', command: 'cursor', dbPath: path.join(appData, 'Cursor', 'User', 'globalStorage', 'state.vscdb') },
-    { code: 'codium', name: 'VSCodium', command: 'codium', dbPath: path.join(appData, 'VSCodium', 'User', 'globalStorage', 'state.vscdb') },
-    { code: 'idea', name: 'IntelliJ IDEA', command: 'idea', dbPath: jetBrainsDir + '/IntelliJIdea*/options/recentProjects.xml' },
-    { code: 'pycharm', name: 'PyCharm', command: 'pycharm', dbPath: jetBrainsDir + '/PyCharm*/options/recentProjects.xml' },
-    { code: 'webstorm', name: 'WebStorm', command: 'webstorm', dbPath: jetBrainsDir + '/WebStorm*/options/recentProjects.xml' },
-    { code: 'goland', name: 'GoLand', command: 'goland', dbPath: jetBrainsDir + '/GoLand*/options/recentProjects.xml' }
+    { code: 'vsc', name: 'VS Code', command: 'code', dbPath: vscDbPath, shell: defaultShell },
+    { code: 'cursor', name: 'Cursor', command: 'cursor', dbPath: path.join(appData, 'Cursor', 'User', 'globalStorage', 'state.vscdb'), shell: defaultShell },
+    { code: 'codium', name: 'VSCodium', command: 'codium', dbPath: path.join(appData, 'VSCodium', 'User', 'globalStorage', 'state.vscdb'), shell: defaultShell },
+    { code: 'idea', name: 'IntelliJ IDEA', command: 'idea', dbPath: path.join(jbDir, 'IntelliJIdea*', 'options', 'recentProjects.xml'), shell: defaultShell },
+    { code: 'pycharm', name: 'PyCharm', command: 'pycharm', dbPath: path.join(jbDir, 'PyCharm*', 'options', 'recentProjects.xml'), shell: defaultShell },
+    { code: 'webstorm', name: 'WebStorm', command: 'webstorm', dbPath: path.join(jbDir, 'WebStorm*', 'options', 'recentProjects.xml'), shell: defaultShell },
+    { code: 'goland', name: 'GoLand', command: 'goland', dbPath: path.join(jbDir, 'GoLand*', 'options', 'recentProjects.xml'), shell: defaultShell },
+    { code: 'qoder', name: 'Qoder', command: 'qoder', dbPath: path.join(appData, 'Qoder', 'User', 'globalStorage', 'state.vscdb'), shell: defaultShell }
   ]
 }
 
@@ -366,7 +432,7 @@ function createSubInputPlugin(ide: IDEItem) {
   }
 }
 
-const BUILTIN_CODES = new Set(['vscodeopen'])
+const BUILTIN_CODES = new Set(['ideopen'])
 
 export function refreshPlugins() {
   const ides = getIDEs()
@@ -390,7 +456,7 @@ export function refreshPlugins() {
 
 // ─── 功能注册（供渲染进程调用） ──
 
-const REG_CODES_KEY = 'vsc-registered-codes'
+const REG_CODES_KEY = 'ide-registered-codes'
 
 export function registerFeatures() {
   const ides = getIDEs()
@@ -407,7 +473,7 @@ export function registerFeatures() {
         icon: 'logo.png'
       })
     } catch (e) {
-      console.warn(`[VscodeOpen] ❌ 注册 ${ide.code} 失败:`, e)
+      console.warn(`[ideOpen] ❌ 注册 ${ide.code} 失败:`, e)
     }
   }
 
@@ -416,7 +482,7 @@ export function registerFeatures() {
       try {
         utools.removeFeature(oldCode)
       } catch (e) {
-        console.warn(`[VscodeOpen] ❌ 删除 feature ${oldCode} 失败:`, e)
+        console.warn(`[ideOpen] ❌ 删除 feature ${oldCode} 失败:`, e)
       }
     }
   }
@@ -429,11 +495,14 @@ export function registerFeatures() {
 (window as any).services = {
   readProjects,
   openProject,
+  deleteProject,
   getIDEs,
   saveIDEs,
   refreshPlugins,
   registerFeatures,
   getPresets,
   getQuickFillPresets,
-  detectPresetPaths
+  detectPresetPaths,
+  getAppDataPath: () => utools.getPath('appData'),
+  getDefaultShell: () => defaultShell
 }
