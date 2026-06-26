@@ -36,7 +36,7 @@ export interface ProjectItem {
   name: string
   path: string
   uri: string
-  type: 'folder' | 'workspace' | 'remote'
+  type: 'folder' | 'file' | 'workspace' | 'remote'
   label: string
 }
 
@@ -131,12 +131,13 @@ function parseEntries(entries: any[]): ProjectItem[] {
       )
       const isRemote = uri.startsWith('vscode-remote://')
       const isWorkspace = uri.endsWith('.code-workspace')
+      const isFile = !!e.fileUri && !e.folderUri
       const localPath = isRemote ? '' : uriToPath(uri)
       return {
         name: e.label || name || '未命名',
         path: localPath,
         uri,
-        type: isRemote ? 'remote' as const : isWorkspace ? 'workspace' as const : 'folder' as const,
+        type: isRemote ? 'remote' as const : isWorkspace ? 'workspace' as const : isFile ? 'file' as const : 'folder' as const,
         label: e.label || ''
       }
     })

@@ -152,7 +152,7 @@ export default function ProjectList({ ide, onBack, onEdit }: { ide: IDEItem; onB
             onContextMenu={e => handleContextMenu(e, p)}
             onMouseEnter={() => setSelected(i)}>
             <div className='pl-item-icon'>
-              {p.type === 'remote' ? <IconRemote /> : p.type === 'workspace' ? <IconFile /> : <IconFolder />}
+              {p.type === 'remote' ? <IconRemote /> : p.type === 'workspace' || p.type === 'file' ? <IconFile /> : <IconFolder />}
             </div>
             <div className='pl-item-info'>
               <div className='pl-item-name'>{p.name}</div>

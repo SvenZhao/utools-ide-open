@@ -131,12 +131,13 @@ function parseEntries(entries) {
     );
     const isRemote = uri.startsWith("vscode-remote://");
     const isWorkspace = uri.endsWith(".code-workspace");
+    const isFile = !!e.fileUri && !e.folderUri;
     const localPath = isRemote ? "" : uriToPath(uri);
     return {
       name: e.label || name || "\u672A\u547D\u540D",
       path: localPath,
       uri,
-      type: isRemote ? "remote" : isWorkspace ? "workspace" : "folder",
+      type: isRemote ? "remote" : isWorkspace ? "workspace" : isFile ? "file" : "folder",
       label: e.label || ""
     };
   }).filter(Boolean);
