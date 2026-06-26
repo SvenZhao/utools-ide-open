@@ -54,7 +54,7 @@ export default function ProjectList({ ide, onBack, onEdit }: { ide: IDEItem; onB
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load(); setTimeout(() => inputRef.current?.focus(), 100) }, [ide.code])
+  useEffect(() => { setSearch(''); load(); setTimeout(() => inputRef.current?.focus(), 100) }, [ide.code])
 
   useEffect(() => {
     const q = search.toLowerCase().trim()
