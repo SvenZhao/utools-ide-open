@@ -2,8 +2,9 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build:preload && vite",
-    "build": "npm run build:preload && vite build",
-    "build:preload": "esbuild preload-src/*.ts --outdir=public/preload --platform=node --format=cjs"
+    "build": "npm run build:preload && vite build && npm run build:clean",
+    "build:preload": "esbuild preload-src/*.ts --outdir=public/preload --platform=node --format=cjs",
+    "build:clean": "find dist -name '.DS_Store' -delete && find dist -name '*.map' -delete && rm -f dist/preload/sql-wasm.wasm && find dist/preload/node_modules/sql.js -type f ! -name 'sql-wasm.wasm' ! -name 'sql-wasm.js' ! -name 'package.json' -delete && find dist/preload/node_modules/sql.js -type d -empty -delete"
   },
   "dependencies": {
     "react": "^19.0.0",
