@@ -89,9 +89,9 @@ export default function ProjectList({ ide, onBack, onEdit }: { ide: IDEItem; onB
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
-      e.preventDefault(); setSelected(i => Math.min(i + 1, filtered.length - 1))
+      e.preventDefault(); setSelected(i => i >= filtered.length - 1 ? 0 : i + 1)
     } else if (e.key === 'ArrowUp') {
-      e.preventDefault(); setSelected(i => Math.max(i - 1, 0))
+      e.preventDefault(); setSelected(i => i <= 0 ? filtered.length - 1 : i - 1)
     } else if (e.key === 'Enter' && selected >= 0) {
       e.preventDefault(); handleOpen(filtered[selected])
     } else if ((e.key === 'd' && (e.ctrlKey || e.metaKey)) && selected >= 0) {
