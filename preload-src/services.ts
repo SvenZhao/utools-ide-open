@@ -245,11 +245,17 @@ function getShellEnv(): NodeJS.ProcessEnv {
   if (process.platform === 'win32') return process.env
   try {
     const shell = process.env.SHELL || 'zsh'
-    const envStr = execSync(`${shell} -l -c env`, { encoding: 'utf-8', timeout: 3000 })
+    // 登录 shell 加载 .zprofile/.bash_profile，再 source rc 文件确保 PATH 完整
+    const cmd = `${shell} -l -c 'source ~/.zshrc 2>/dev/null; source ~/.bashrc 2>/dev/null; source ~/.profile 2>/dev/null; env'`
+    const envStr = execSync(cmd, { encoding: 'utf-8', timeout: 3000 })
     const env = { ...process.env }
     envStr.split('\n').forEach(line => {
       const idx = line.indexOf('=')
-      if (idx > 0) env[line.slice(0, idx)] = line.slice(idx + 1)
+      if (idx > 0) {
+        const k = line.slice(0, idx)
+        const v = line.slice(idx + 1)
+        if (k && v) env[k] = v
+      }
     })
     return env
   } catch {

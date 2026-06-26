@@ -226,11 +226,16 @@ function getShellEnv() {
   if (process.platform === "win32") return process.env;
   try {
     const shell = process.env.SHELL || "zsh";
-    const envStr = (0, import_node_child_process.execSync)(`${shell} -l -c env`, { encoding: "utf-8", timeout: 3e3 });
+    const cmd = `${shell} -l -c 'source ~/.zshrc 2>/dev/null; source ~/.bashrc 2>/dev/null; source ~/.profile 2>/dev/null; env'`;
+    const envStr = (0, import_node_child_process.execSync)(cmd, { encoding: "utf-8", timeout: 3e3 });
     const env = { ...process.env };
     envStr.split("\n").forEach((line) => {
       const idx = line.indexOf("=");
-      if (idx > 0) env[line.slice(0, idx)] = line.slice(idx + 1);
+      if (idx > 0) {
+        const k = line.slice(0, idx);
+        const v = line.slice(idx + 1);
+        if (k && v) env[k] = v;
+      }
     });
     return env;
   } catch {
