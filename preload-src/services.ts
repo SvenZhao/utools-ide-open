@@ -326,7 +326,7 @@ export function getPresets() {
   }
 }
 
-const defaultShell = process.platform === 'darwin' ? 'zsh -l -c' : process.platform === 'linux' ? 'bash -l -c' : ''
+const defaultShell = process.platform === 'darwin' ? 'zsh -l -i -c' : process.platform === 'linux' ? 'bash -l -i -c' : ''
 
 export function getQuickFillPresets() {
   const home = process.env.HOME || process.env.USERPROFILE || ''

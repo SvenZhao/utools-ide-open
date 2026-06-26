@@ -301,7 +301,7 @@ function getPresets() {
     }
   };
 }
-const defaultShell = process.platform === "darwin" ? "zsh -l -c" : process.platform === "linux" ? "bash -l -c" : "";
+const defaultShell = process.platform === "darwin" ? "zsh -l -i -c" : process.platform === "linux" ? "bash -l -i -c" : "";
 function getQuickFillPresets() {
   const home2 = process.env.HOME || process.env.USERPROFILE || "";
   const appData = utools.getPath("appData");
