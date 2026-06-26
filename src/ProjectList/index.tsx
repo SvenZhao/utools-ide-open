@@ -94,7 +94,9 @@ export default function ProjectList({ ide, onBack, onEdit }: { ide: IDEItem; onB
       e.preventDefault(); setSelected(i => Math.max(i - 1, 0))
     } else if (e.key === 'Enter' && selected >= 0) {
       e.preventDefault(); handleOpen(filtered[selected])
-    } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected >= 0) {
+    } else if (e.key === 'Delete' && selected >= 0) {
+      e.preventDefault(); handleDelete(filtered[selected])
+    } else if (e.key === 'Backspace' && !search && selected >= 0) {
       e.preventDefault(); handleDelete(filtered[selected])
     }
   }
